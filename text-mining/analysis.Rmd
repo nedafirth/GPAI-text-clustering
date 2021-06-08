@@ -236,7 +236,71 @@ similarity_pairs
 
 
 
+## Adding domain and categories
 
+```{r}
+catdoms = data %>% 
+  select(Categories, Domain) %>% 
+  mutate(Project = row_number())
+
+```
+
+```{r}
+similarity = similarity_pairs %>% 
+  rename(TextSimilarity = value) %>% 
+  arrange(desc(TextSimilarity)) %>% 
+  mutate(PrevP2 = lag(Project2),PrevP1 = lag(Project1),
+         DuplicatedP1 = Project1 == PrevP2,
+         DuplicatedP2 = Project2 == PrevP1,
+         isDuplicated = DuplicatedP1 & DuplicatedP2,
+         isDuplicated = replace_na(isDuplicated, FALSE)) %>% 
+  filter(!isDuplicated) %>% 
+  select(-PrevP2, -PrevP1, -DuplicatedP1, -DuplicatedP2, -isDuplicated)
+
+```
+
+```{r}
+map_category_similarity = function(Project1, Project2) {
+  Project1Cat = filter(catdoms, Project == Project1)$Categories
+  Project2Cat = filter(catdoms, Project == Project2)$Categories
+  
+  return (as.numeric(Project1Cat == Project2Cat))
+}
+
+similarity = similarity %>% 
+  mutate(CatSimilarity = map2_dbl(Project1, Project2, map_category_similarity))
+
+```
+
+```{r}
+map_domain_similarity = function(Project1, Project2) {
+  Project1Dom = filter(catdoms, Project == Project1)$Domain
+  Project2Dom = filter(catdoms, Project == Project2)$Domain
+  
+  return (as.numeric(Project1Dom == Project2Dom))
+}
+
+similarity = similarity %>% 
+  mutate(DomSimilarity = map2_dbl(Project1, Project2, map_domain_similarity))
+
+```
+
+
+```{r}
+text_weight = 0.05
+cat_weight = 0.05
+dom_weight = 0.9
+
+similarity = similarity %>% 
+  rowwise() %>% 
+  mutate(Overall = TextSimilarity * text_weight + CatSimilarity *  cat_weight + DomSimilarity * dom_weight) %>% 
+  ungroup() %>% 
+  arrange(desc(Overall))
+
+similarity
+
+
+```
 
 
 ## Adding domain and categories
