@@ -50,6 +50,16 @@ words %>%
   labs(y=NULL)
 ```
 
+
+```{r}
+library(wordcloud)
+pal <- brewer.pal(8,"Dark2")
+words %>% 
+  #anti_join(stopwords) %>% 
+  count(word) %>% 
+  with(wordcloud(word, n, random.order = FALSE, max.words = 100, colors=pal))
+```
+
 ## LDA
 
 ### Generating Topics
