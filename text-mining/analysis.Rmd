@@ -12,8 +12,9 @@ library(wordcloud)
 library(RColorBrewer)
 library(topicmodels)
 library(googlesheets4)
+library(ldatuning)
 
-data = read_excel("./data/data.xlsx", sheet = "Shortlisted Initiatives")
+data = read_excel("./data/data.xlsx", sheet = "Catalogue")
 ```
 
 # Preprocessing Data
@@ -26,7 +27,7 @@ text_data = data %>%
 words = text_data %>% 
   unnest_tokens(word, text) 
 
-# Filter Stopwords
+
 custom_stopwords = c("covid","19","2","50")
 
 words = words %>% 
@@ -41,23 +42,13 @@ words %>%
 
 ```{r}
 words %>%
-  filter(n > 2) %>% 
+  filter(n > 3) %>% 
   arrange(n) %>% 
   mutate(word = fct_reorder(word, desc(n))) %>% 
   ggplot(aes(word, n)) +
   geom_bar(stat = "identity", fill="#f68060", alpha=.6, width=.4) +
   coord_flip() +
   labs(y=NULL)
-```
-
-
-```{r}
-library(wordcloud)
-pal <- brewer.pal(8,"Dark2")
-words %>% 
-  #anti_join(stopwords) %>% 
-  count(word) %>% 
-  with(wordcloud(word, n, random.order = FALSE, max.words = 100, colors=pal))
 ```
 
 ## LDA
@@ -70,11 +61,11 @@ words_dtm = words %>%
 
 
 ```{r}
-library(ldatuning)
-# Compute the K value "scores" from K=2 to K=15
+
+# Compute the K value "scores" from K=4 to K=45
 result = FindTopicsNumber(
     words_dtm,
-    topics = seq(from = 2, to = 15, by = 1),
+    topics = seq(from = 4, to = 45, by = 1),
     metrics = c("Griffiths2004", "CaoJuan2009", "Arun2010", "Deveaud2014"),
     method = "Gibbs",
     control = list(seed = 1948),
@@ -87,7 +78,7 @@ FindTopicsNumber_plot(result)
 
 
 ```{r}
-k = 6
+k = 15
 topics = LDA(words_dtm,k=k)
 
 word_topics = tidy(topics, matrix="beta")
@@ -110,10 +101,12 @@ topic_terms %>%
 
 ### Grouping projects by topics
 
+
 ```{r}
 project_topics = tidy(topics, matrix = "gamma")
 project_topics
 ```
+
 
 
 ## Saving to Google Sheets
@@ -152,6 +145,7 @@ topic_rows = tibble(
 )
 
 word_output = bind_rows(word_rows, topic_rows)
+
 write_sheet(word_output, "https://docs.google.com/spreadsheets/d/1pNwt1-LH5ksxTPJJGO5wMFdjr7O14Bct5MvWm9uhUC8/edit#gid=0")
 
 ```
@@ -162,11 +156,11 @@ write_sheet(word_output, "https://docs.google.com/spreadsheets/d/1pNwt1-LH5ksxTP
 
 ```{r}
 filtered_projects = project_topics %>% 
-  filter(gamma > 0.001) %>% 
+  filter(gamma > 0.01) %>% 
   mutate(Project = str_c("Project ", document)) %>% 
   select(Project, topic)
 
-projects = str_c("Project ", 1:36)
+projects = str_c("Project ", 1:93)
 topic_values = rep(NA, length(projects))
 for (i in 1:length(projects)){
   project = projects[i]
@@ -186,7 +180,7 @@ project_rows = tibble(
 project_data = data %>% 
   mutate(Label = str_c("Project ", row_number())) %>% 
   rename(Description = `Brief Description`, name = `Initiative Name`) %>% 
-  select(Label, Description, Categories, Themes, Domain, Mission, name) 
+  select(Label, Description, Category, Themes, Domain, Mission, name) 
   
 
 project_rows = left_join(project_rows, project_data, by ="Label")
@@ -194,7 +188,7 @@ project_rows = left_join(project_rows, project_data, by ="Label")
 project_rows = project_rows %>% 
   select(-Label) %>% 
   rename(Label = name) %>% 
-  select(Label, Type, Description, Topic, Categories, Themes, Domain, Mission)
+  select(Label, Type, Description, Topic, Category, Themes, Domain, Mission)
 
 project_output = bind_rows(project_rows, topic_rows)
 write_sheet(project_output, "https://docs.google.com/spreadsheets/d/1p4QQaYk465-qHQmk-Wsh28dlk-z6iAkw6IJC4Dx1XFQ/edit#gid=0")
@@ -230,7 +224,6 @@ as.matrix(similarities)
 ```{r}
 library(reshape2)
 melted_matrix =  melt(as.matrix(similarities))
-
 ```
 
 ```{r}
@@ -251,15 +244,14 @@ similarity_pairs
 
 ```{r}
 catdoms = data %>% 
-  select(Categories, Domain) %>% 
+  select(Category, Domain) %>% 
   mutate(initiative = row_number())
 
 ```
 
 ```{r}
 similarity = similarity_pairs %>% 
-  rename(TextSimilarity = value) %>% 
-  arrange(desc(TextSimilarity)) %>% 
+  arrange(desc(value)) %>% 
   mutate(PrevP2 = lag(initiative1),PrevP1 = lag(initiative2),
          DuplicatedP1 = initiative1 == PrevP2,
          DuplicatedP2 = initiative2 == PrevP1,
@@ -272,8 +264,8 @@ similarity = similarity_pairs %>%
 
 ```{r}
 map_category_similarity = function(initiative1, initiative2) {
-  Project1Cat = filter(catdoms, initiative == initiative1)$Categories
-  Project2Cat = filter(catdoms, initiative == initiative2)$Categories
+  Project1Cat = filter(catdoms, initiative == initiative1)$Category
+  Project2Cat = filter(catdoms, initiative == initiative2)$Category
   
   return (as.numeric(Project1Cat == Project2Cat))
 }
@@ -298,16 +290,15 @@ similarity = similarity %>%
 
 
 ```{r}
-text_weight = 0.05
-cat_weight = 0.45
-dom_weight = 0.5
+text_weight = 0.01
+cat_weight = 0.7
+dom_weight = 0.29
 
 similarity = similarity %>% 
   rowwise() %>% 
-  mutate(Overall = TextSimilarity * text_weight + CatSimilarity *  cat_weight + DomSimilarity * dom_weight) %>% 
+  mutate(Overall = value * text_weight + CatSimilarity *  cat_weight + DomSimilarity * dom_weight) %>% 
   ungroup() %>% 
   arrange(desc(Overall))
-
 similarity
 
 
