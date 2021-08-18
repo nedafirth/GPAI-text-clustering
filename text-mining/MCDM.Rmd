@@ -1,0 +1,165 @@
+---
+title: "AHP"
+author: "Neda Pourreza"
+date: "06/07/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(DiagrammeR)
+library(tidyverse)
+```
+
+## Introduction
+
+In this document, we will apply analytic hierarchy process (AHP) method to choose three initiatives (out of 93) for accelerating research, detection, prevention, response and recovery in the context of Covid-19 pandemic. AHP is a method for multi-criteria decision making (MCDM) process. The following steps are needed to implement AHP:
+
+1. Structure the model. 
+
+Which three initiatives need to be selected to meet a satisfactory level of achievement in implementing artificial intelligence (AI) for accelerating research, detection, prevention, response and recovery in response to Covid-19 pandemic? 
+
+2. Build the model. 
+
+What are the main decision criteria that are related to the initiatives (alternatives)? For instance, 'cost' can be considered as a criteria. A value is assigned to each criteria that specifically determines the importance of each criteria corresponding to each initiative. (can we use some of the existing variables such as domain or category? For instance, the importance of domain corresponding to each initiative). The decision criteria can also include sub criteria. For example, social, biological, and clinical are the three sub criteria for the domain criteria. 
+
+3. Define the objective function.
+
+What is the final goal?
+
+
+##
+
+```{r}
+grViz(diagram = "digraph flowchart {
+      # define node aesthetics
+      node [fontname = Arial, shape = rectangle, color = Lavender, style = filled]        
+      tab1 [label = '@@1']
+      tab2 [label = '@@2']
+      tab3 [label = '@@3']
+      tab4 [label = '@@4']
+      tab5 [label = '@@5']
+      tab6 [label = '@@6']
+      tab7 [label = '@@7']
+      tab8 [label = '@@8']
+# set up node layout
+      tab1 -> tab2;
+      tab1 -> tab3;
+      tab1 -> tab4;
+      tab1 -> tab5;
+      tab2 -> tab6;
+      tab2 -> tab7;
+      tab2 -> tab8;
+      tab3 -> tab6;
+      tab3 -> tab7;
+      tab3 -> tab8;
+      tab4 -> tab6;
+      tab4 -> tab7;
+      tab4 -> tab8;
+      tab5 -> tab6;
+      tab5 -> tab7;
+      tab5 -> tab8;
+      }
+      [1]: 'Choose the most promising initiatives'
+      [2]: 'Criteria1'
+      [3]: 'Criteria2'
+      [4]: 'Criteria3'
+      [5]: 'Criteria4'
+      [6]: 'Initiative1'
+      [7]: 'Initiative2'
+      [8]: 'Initiative3'
+
+      ")
+```
+## MCDM method
+```{r}
+library(MCDM)
+
+d <- matrix(c(1,2,5,3000,3750,4500), nrow = 3, ncol = 2)
+w <- c(0.5, 0.5)
+cb <- c('min','max')
+lambda <- 0.5
+v <- 0.5
+AB <- matrix(c(1,5,3000,4500), nrow = 2, ncol = 2)
+CD <- matrix(c(1,1,4500,4500), nrow = 2, ncol = 2)
+MetaRanking(d,w,cb,lambda,v,AB,CD)
+```
+
+## FuzzyAHP method
+
+Comparison matrix includes the pairwise comparison of criteria corresponding to each other. If the values in the pairwise comparison table (subjective judgment of the experts) is represented as character, then *pairwiseComparisonMatrix* function converts it to numeric (double) values. After creating the comparison matrix, we need to check the consistency of the pairwise comparison matrix.
+```{r}
+
+comparisonMatrix = read_csv('data/pairwise-comparison.csv')
+comparisonMatrix = comparisonMatrix %>% 
+   select(-X1)
+comparisonMatrix = as.matrix(comparisonMatrix)
+comparisonMatrix = FuzzyAHP::pairwiseComparisonMatrix(comparisonMatrix)
+show(comparisonMatrix)
+
+
+FuzzyAHP::consistencyRatio(comparisonMatrix)
+CR = FuzzyAHP::consistencyRatio(comparisonMatrix, print.report = FALSE)
+print(CR)
+
+
+
+weights = calculateWeights(comparisonMatrix)
+print(weights)
+
+
+values = read_csv('data/alternatives.csv')
+
+values = values %>% 
+   select(-X1)
+
+
+values = matrix(values, nrow = length(values)/length(weights@weights), ncol = length(weights@weights), byrow = TRUE)
+```
+
+
+```{r}
+
+
+comparisonMatrixValues = c("1","9","5",
+                       "1/9","1","1/3",
+                       "1/5","3","1")
+comparisonMatrix = matrix(comparisonMatrixValues, nrow = 3, ncol = 3, byrow = TRUE)
+comparisonMatrix = pairwiseComparisonMatrix(comparisonMatrix)
+
+fuzzyComparisonMatrix = fuzzyPairwiseComparisonMatrix(comparisonMatrix)
+print(fuzzyComparisonMatrix)
+
+
+
+weights = calculateWeights(comparisonMatrix)
+values = c(4,5,3,
+1,3,9,
+8,6,4,
+3,2,7,
+6,7,5,
+4,5,3,
+4,9,9,
+2,7,6)
+values = matrix(values, nrow = length(values)/length(weights@weights), ncol = length(weights@weights), byrow = TRUE)
+result = calculateAHP(fuzzyComparisonMatrix, values)
+
+
+fuzzyNumer = getFuzzyNumber(result, as.integer(2))
+print(fuzzyNumer)
+
+
+defuzzified = defuzziffy(result, "Yager")
+print(defuzzified)
+rank = (nrow(values) + 1) - sum(is.na(defuzzified)) - rank(defuzzified, na.last = "keep", ties.method = "max")
+print(rank)
+```
+
+```{r}
+comparisonMatrixValues = c(1,9,5,1/9,1,1/3,1/5,3,1)
+comparisonMatrix = as.matrix(comparisonMatrixValues, nrow = 3, ncol = 3, byrow = TRUE)
+matrix = pairwiseComparisonMatrix(comparisonMatrix)
+weights = calculateWeights(comparisonMatrix)
+print(weights)
+```
+

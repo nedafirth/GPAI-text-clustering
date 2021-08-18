@@ -14,7 +14,7 @@ library(topicmodels)
 library(googlesheets4)
 library(ldatuning)
 
-data = read_excel("./data/data.xlsx", sheet = "Catalogue")
+data = read_excel("data/catalogue.xlsx", sheet = "Shortlisted Initiatives")
 ```
 
 # Preprocessing Data
@@ -65,7 +65,7 @@ words_dtm = words %>%
 # Compute the K value "scores" from K=4 to K=45
 result = FindTopicsNumber(
     words_dtm,
-    topics = seq(from = 4, to = 45, by = 1),
+    topics = seq(from = 4, to = 18, by = 1),
     metrics = c("Griffiths2004", "CaoJuan2009", "Arun2010", "Deveaud2014"),
     method = "Gibbs",
     control = list(seed = 1948),
@@ -78,10 +78,10 @@ FindTopicsNumber_plot(result)
 
 
 ```{r}
-k = 15
-topics = LDA(words_dtm,k=k)
+k = 6
+topics = LDA(words_dtm,k = k)
 
-word_topics = tidy(topics, matrix="beta")
+word_topics = tidy(topics, matrix = "beta")
 
 topic_terms = word_topics %>% 
   group_by(topic) %>% 
@@ -91,7 +91,7 @@ topic_terms = word_topics %>%
 
 topic_terms %>% 
   mutate(term = reorder_within(term, beta, topic)) %>% 
-  ggplot(aes(beta, term, fill=factor(topic))) +
+  ggplot(aes(beta, term, fill = factor(topic))) +
   geom_col(show.legend = FALSE) + 
   facet_wrap(~ topic, scales = "free") +
   scale_y_reordered()
@@ -120,7 +120,7 @@ filtered_words = word_topics %>%
 
 unique_words = unique(filtered_words$term)
 topic_values = rep(NA, length(unique_words))
-for (i in 1:length(topic_values)){
+for (i in 1:length(topic_values)) {
   word = unique_words[i]
   values = filtered_words %>% 
     filter(term == word)
@@ -160,9 +160,9 @@ filtered_projects = project_topics %>%
   mutate(Project = str_c("Project ", document)) %>% 
   select(Project, topic)
 
-projects = str_c("Project ", 1:93)
+projects = str_c("Project ", 1:36)
 topic_values = rep(NA, length(projects))
-for (i in 1:length(projects)){
+for (i in 1:length(projects)) {
   project = projects[i]
   values = filtered_projects %>% 
     filter(Project == project)
@@ -180,15 +180,15 @@ project_rows = tibble(
 project_data = data %>% 
   mutate(Label = str_c("Project ", row_number())) %>% 
   rename(Description = `Brief Description`, name = `Initiative Name`) %>% 
-  select(Label, Description, Category, Themes, Domain, Mission, name) 
+  select(Label, Description, Categories, Themes, Domain, Mission, name) 
   
 
-project_rows = left_join(project_rows, project_data, by ="Label")
+project_rows = left_join(project_rows, project_data, by = "Label")
 
 project_rows = project_rows %>% 
   select(-Label) %>% 
   rename(Label = name) %>% 
-  select(Label, Type, Description, Topic, Category, Themes, Domain, Mission)
+  select(Label, Type, Description, Topic, Categories, Themes, Domain, Mission)
 
 project_output = bind_rows(project_rows, topic_rows)
 write_sheet(project_output, "https://docs.google.com/spreadsheets/d/1p4QQaYk465-qHQmk-Wsh28dlk-z6iAkw6IJC4Dx1XFQ/edit#gid=0")
@@ -200,11 +200,11 @@ write_sheet(project_output, "https://docs.google.com/spreadsheets/d/1p4QQaYk465-
 ```{r}
 library(SnowballC)
 library(stopwords)
-library(text2vec)
+#library(text2vec)
 
 tfidf_words = words %>% 
   select(-n) %>% 
-  mutate(word = wordStem(word, language="en")) %>% 
+  mutate(word = wordStem(word, language = "en")) %>% 
   count(initiative, word, sort = TRUE) %>% 
   bind_tf_idf(word, initiative, n)
 
@@ -216,7 +216,7 @@ sparse_matrix[1:10, 1:4]
 ```
 
 ```{r}
-similarities = sim2(sparse_matrix, method = "cosine", norm="l2")
+similarities = sim2(sparse_matrix, method = "cosine", norm = "l2")
 #similarities[1:10, 1:4]
 as.matrix(similarities)
 ```
