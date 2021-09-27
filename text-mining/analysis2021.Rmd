@@ -2,6 +2,11 @@
 title: "Analysis"
 output: html_notebook
 ---
+
+# Step 0
+Getting the data
+
+In the following chunk of code, we used the data from the Living Repository - 2021 Excel file. We extracted the initiatives whose Status are 'Sent to evaluators' OR 'Information complete'. The main objective of this document is to find the initiatives that are similar (or different) to each other word_wise; i.e. the similarity degree of each pair of initiatives with regards to the words that used to explain their Description and/or thier Mission.
 ```{r setup, include=FALSE}
 library(tidyverse)
 library(tidytext)
@@ -18,7 +23,7 @@ library(janitor)
 library(readxl)
 
 
-data = read_xlsx("./data/GPAI AIPR 2021 - Living Repository.xlsx", sheet = "Neda")
+data = read_xlsx("./data/GPAI AIPR 2021 - Living Repository.xlsx", sheet = "Living Repository 2021")
 
 data = data %>% 
   filter(Status %in% c('Sent to evaluators', 'Information complete'))
@@ -26,7 +31,8 @@ data = data %>%
 
 
 
-# Preprocessing Data
+# Step 1
+After reading the data from the Living Repository, we counted the number of words used in the "Description" and the "Mission" columns. The aim of the following chunk of code is counting the number of times each word has been used in each initiative. Note that some of the common words such as 'covid', '19', '2' or '50' have been excluded. 
 ```{r}
 text_data = data %>% 
   mutate(initiative = row_number()) %>% 
@@ -49,7 +55,8 @@ words %>%
   arrange(desc(n))
 ```
 
-
+# Step 2
+In this step, we considered the words that have been used more than 3 times. Note that these values are across the whole initiatives. For example, the word "data" has been used has been used more than 25 times across all the initiatives. 
 ```{r}
 words %>%
   filter(n > 3) %>% 
@@ -61,16 +68,18 @@ words %>%
   labs(y = NULL)
 ```
 
+# Step 3
+Now that we know the number of times each word has been used in each initiative and across all initiatives, we can find the number of clusters we can fit these initiatives into in terms of the similarities or differences regarding to these word. As it is shown in the following graphs, they have two lines each that cross each other at some points. This intersection point is the value that determines the number of clusters. The first graph has two intersections: 7 and 8. However, the second one has only one: 6. We would consider 8 cluster to make sure that all the differences and similarities have been taken into account. 
 ## LDA
 
-### Generating Topics
+## Generating Topics
 ```{r}
 words_dtm = words %>% 
   cast_dtm(initiative, word, n)
 ```
 
 
-```{r}
+```{r number_of_cluster}
 
 # Compute the K value "scores" from K=4 to K=45
 result = FindTopicsNumber(
@@ -86,9 +95,10 @@ result = FindTopicsNumber(
 FindTopicsNumber_plot(result)
 ```
 
+Now that we have the number of clusters that the words can be fitted in, we can see the members of each cluster. Note that some clusters overlap with each other. For instance, the word "data" can be fitted to almost all the clusters. 
 
 ```{r}
-k = 8
+k = 6
 topics = LDA(words_dtm,k = k)
 
 word_topics = tidy(topics, matrix = "beta")
@@ -109,8 +119,8 @@ topic_terms %>%
 ```
 
 
-### Grouping projects by topics
-
+# Step 4 (Grouping initiatives (shown as document in the following code) by clusters (shown as topic in the following code))
+So far we found the clusters for the words. But we have not grouped the initiatives yet. In this step we will determined that which initiative belongs to each cluster based on the similarities/differences of the words each initiative has. In the following code, "gamma" shows the degree at which each initiative belongs to each cluster. The lower the gamma value is, the less it is likely that that initiative (document) belongs to that cluster (topic).
 
 ```{r}
 project_topics = tidy(topics, matrix = "gamma")
@@ -118,12 +128,11 @@ project_topics
 ```
 
 
+# Step 5
 
-## Saving to Google Sheets
+In this step, we will create a Google Sheet that tells each word belongs to each cluster(s). We need this step in order to depict the clusters in a graphical format. 
 
-
-### Word Connections
-```{r}
+```{r Word_Connections}
 
 filtered_words = word_topics %>% 
   filter(beta > 0.01) 
@@ -160,9 +169,8 @@ write_sheet(word_output, "https://docs.google.com/spreadsheets/d/1pNwt1-LH5ksxTP
 
 ```
 
-
-### Project Connections
-
+# Step 6
+In this step, we will create a Google Sheet that tells each initiative belongs to each cluster(s). We need this step in order to depict the clusters in a graphical format. 
 
 ```{r}
 filtered_projects = project_topics %>% 
@@ -199,13 +207,16 @@ project_rows = project_rows %>%
   rename(Label = Name) %>% 
   select(Label, Type, Description, Topic, Domain, Mission)
 
-project_output = bind_rows(project_rows, topic_rows)
-write_sheet(project_output, "https://docs.google.com/spreadsheets/d/1p4QQaYk465-qHQmk-Wsh28dlk-z6iAkw6IJC4Dx1XFQ/edit#gid=0")
+project_output = bind_rows(project_rows, topic_rows) %>% 
+  mutate(Domain = replace_na(Domain, "Topic"))
+write_sheet(project_output, "https://docs.google.com/spreadsheets/d/1p4QQaYk465-qHQmk-Wsh28dlk-z6iAkw6IJC4Dx1XFQ/edit#gid=0", sheet = "project_output")
 
 ```
 
 
-# Similarity Comparisons
+# Step 7
+
+In this step, we will create a matrix that tells the degree of similarities/differences between each pair of initiatives. For example, initiative number 15 and 3 are 13% similar corresponding to the word similarities (in terms of Description and Mission definitions). 
 
 ```{r}
 library(SnowballC)
@@ -223,13 +234,13 @@ sparse_matrix = tfidf_words %>%
 
 
 sparse_matrix[1:10, 1:4]
-```
 
-```{r}
+
 similarities = sim2(sparse_matrix, method = "cosine", norm = "l2")
 #similarities[1:10, 1:4]
 as.matrix(similarities)
 ```
+
 
 ```{r}
 library(reshape2)
@@ -248,9 +259,8 @@ similarity_pairs = melted_matrix %>%
 similarity_pairs
 ```
 
-
-
-## Adding domain and categories
+# Step 8 (Adding domain)
+Now that we have the clusters, we want to know how similar/different the initiatives are with regards to the Domain variable. We will do so by assigning weights to the two criteria we used so far named Domain and the similarity value between each pair (see above code >>> value column)
 
 ```{r}
 catdoms = data %>% 
@@ -272,19 +282,6 @@ similarity = similarity_pairs %>%
 
 ```
 
-```{r}
-# in the new Live Repository we do not have category!
-map_category_similarity = function(initiative1, initiative2) {
-  Project1Cat = filter(catdoms, initiative == initiative1)$Category
-  Project2Cat = filter(catdoms, initiative == initiative2)$Category
-  
-  return(as.numeric(Project1Cat == Project2Cat))
-}
-
-similarity = similarity %>% 
-  mutate(CatSimilarity = map2_dbl(initiative1, initiative2, map_category_similarity))
-
-```
 
 ```{r}
 map_domain_similarity = function(initiative1, initiative2) {
@@ -316,7 +313,9 @@ similarity
 ```
 
 
+# Step 9
 
+Now that we know each initiative belongs to which cluster(s). So, we can depict it in a graphical way. To do so, we will use Kumu. This has been done automatically by writing the dataframes to google sheets. The kumu map is automatically linked to the google sheet, and will update when it changes. 
 
 
 
